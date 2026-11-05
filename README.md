@@ -1,8 +1,8 @@
 # setup-datatug
 
-[![Watch DataTug in 30 seconds, the product video](assets/datatug-in-30-play.svg)](https://youtu.be/Dkq1uoMZa5E)
+[![Watch DataTug in 30 seconds, the product video](assets/datatug-in-30-play.svg)](https://youtu.be/P8c-uw29XyE)
 
-[Watch DataTug in 30 seconds, the product video (0:30)](https://youtu.be/Dkq1uoMZa5E)
+[Watch DataTug in 30 seconds, the product video (0:30)](https://youtu.be/P8c-uw29XyE)
 
 Install an exact [DataTug CLI](https://github.com/datatug/datatug-cli) release in GitHub Actions without Go. This action installs the CLI only; workflows choose which commands to run. The action downloads the published DataTug release; the CLI's own terms apply separately. Release-provided license files and notices are kept beside the installed binary; their presence does not make draft terms effective.
 
