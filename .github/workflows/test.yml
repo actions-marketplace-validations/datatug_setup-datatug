@@ -5,6 +5,8 @@ on:
   workflow_dispatch:
 permissions:
   contents: read
+env:
+  DATATUG_VERSION: v0.153.1
 jobs:
   test:
     strategy:
@@ -14,16 +16,38 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Resolve the verified DataTug archive digest
+        id: release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $release = gh api "repos/datatug/datatug-cli/releases/tags/$env:DATATUG_VERSION" | ConvertFrom-Json
+          if ($LASTEXITCODE -ne 0 -or $release.tag_name -cne $env:DATATUG_VERSION -or
+              -not $release.immutable -or $release.draft -or $release.prerelease) {
+            throw 'expected a published immutable DataTug release'
+          }
+          $os = switch ($env:RUNNER_OS) { Linux { 'linux' } macOS { 'darwin' } Windows { 'windows' } }
+          $arch = switch ($env:RUNNER_ARCH) { X64 { 'amd64' } ARM64 { 'arm64' } }
+          if (-not $os -or -not $arch) { throw 'unsupported runner platform' }
+          $extension = if ($os -eq 'windows') { 'zip' } else { 'tar.gz' }
+          $version = $env:DATATUG_VERSION.Substring(1)
+          $asset = @($release.assets | Where-Object name -CEQ "datatug_${version}_${os}_${arch}.$extension")
+          if ($asset.Count -ne 1 -or $asset[0].digest -cnotmatch '^sha256:[a-f0-9]{64}$') {
+            throw 'missing or invalid archive digest'
+          }
+          Add-Content -Path $env:GITHUB_OUTPUT -Value "sha256=$($asset[0].digest.Substring(7))"
       - id: setup
         uses: ./
         with:
-          version: v0.131.0
+          version: ${{ env.DATATUG_VERSION }}
+          expected-sha256: ${{ steps.release.outputs.sha256 }}
       - name: Verify installed CLI
         shell: pwsh
         env:
           RESULT_VERSION: ${{ steps.setup.outputs.version }}
         run: |
-          if ($env:RESULT_VERSION -ne 'v0.131.0') { throw 'wrong output version' }
+          if ($env:RESULT_VERSION -cne $env:DATATUG_VERSION) { throw 'wrong output version' }
           $path = (Get-Command datatug).Source
           if (-not $path.StartsWith($env:RUNNER_TEMP, [StringComparison]::OrdinalIgnoreCase)) { throw "unexpected binary: $path" }
           $installDir = Split-Path $path
@@ -31,12 +55,13 @@ jobs:
             if (-not (Test-Path (Join-Path $installDir $notice))) { throw "missing release notice: $notice" }
           }
           $reported = & datatug --version
-          if ($LASTEXITCODE -ne 0 -or $reported -notmatch '(^|[^0-9])0\.131\.0([^0-9]|$)') { throw "wrong binary version: $reported" }
+          $expectedVersion = [regex]::Escape($env:DATATUG_VERSION.Substring(1))
+          if ($LASTEXITCODE -ne 0 -or $reported -notmatch "(^|[^0-9])${expectedVersion}([^0-9.]|$)") { throw "wrong binary version: $reported" }
       - id: wrong_digest
         continue-on-error: true
         uses: ./
         with:
-          version: v0.131.0
+          version: ${{ env.DATATUG_VERSION }}
           expected-sha256: '0000000000000000000000000000000000000000000000000000000000000000'
       - name: Assert failure
         shell: pwsh
